@@ -10,6 +10,7 @@ from sbom_extractor.spdx_generator import SPDXGenerator
 from sbom_extractor.spdx3_generator import SPDX3Generator
 from sbom_extractor.cyclonedx_generator import CycloneDXGenerator
 from sbom_extractor.cpe import generate_cpe
+from sbom_extractor.catena_x_generator import CatenaXGenerator
 from sbom_extractor import ntia, validator
 
 class TestSBOMGenerator(unittest.TestCase):
@@ -471,6 +472,106 @@ empty=
         names = [d["name"] for d in deps]
         self.assertIn("junit:junit", names)
         self.assertIn("com.google.guava:guava", names)
+
+
+    def test_catena_x_cx0158_compliant(self):
+        """CX-0158: only DEPENDS_ON rels, no file elements, valid SPDX 3.0 JSON-LD."""
+        deps = [
+            {"name": "requests", "version": "2.31.0", "type": "pypi", "license": "Apache-2.0"},
+            {"name": "com.google.guava:guava", "version": "32.0", "type": "maven", "license": "Apache-2.0"},
+        ]
+        gen = CatenaXGenerator("my-product", "1.0.0", supplier="Acme Corp")
+        doc = gen.generate(deps)
+
+        self.assertEqual(doc["@context"], "https://spdx.org/rdf/3.0.1/spdx-context.jsonld")
+        graph = doc["@graph"]
+        types = [e["type"] for e in graph]
+        self.assertIn("CreationInfo", types)
+        self.assertIn("SpdxDocument", types)
+        self.assertIn("software_Package", types)
+        self.assertNotIn("software_File", types)
+
+        # Only DEPENDS_ON relationships
+        rels = [e for e in graph if e["type"] == "Relationship"]
+        self.assertTrue(len(rels) > 0)
+        for rel in rels:
+            self.assertEqual(rel["relationshipType"], "dependsOn",
+                             f"Non-DEPENDS_ON relationship found: {rel}")
+
+        # CX-0158 validation passes
+        errs = validator.validate_catena_x(doc)
+        self.assertEqual(errs, [], f"CX-0158 validation errors: {errs}")
+
+    def test_catena_x_option1_anonymous_nodes(self):
+        """Option 1: each dep is wrapped in an anonymous node with SHA3-256 ID."""
+        deps = [{"name": "lodash", "version": "4.17.21", "type": "npm", "license": "MIT"}]
+        gen = CatenaXGenerator("my-product", "1.0.0", propagation_option=1)
+        doc = gen.generate(deps)
+
+        graph = doc["@graph"]
+        anon_nodes = [e for e in graph if e.get("name") == "Anonymous node"]
+        self.assertEqual(len(anon_nodes), 1)
+        self.assertTrue(anon_nodes[0]["spdxId"].startswith("catena-x-sbom-option-1-"))
+        # SHA3-256 hex digest is 64 chars
+        hex_part = anon_nodes[0]["spdxId"].replace("catena-x-sbom-option-1-", "")
+        self.assertEqual(len(hex_part), 64)
+
+        errs = validator.validate_catena_x(doc)
+        self.assertEqual(errs, [], f"CX-0158 validation errors: {errs}")
+
+    def test_catena_x_write_atomic(self):
+        """write() produces a valid JSON-LD file with .spdx.jsonld path."""
+        deps = [{"name": "rich", "version": "13.0.0", "type": "pypi", "license": "MIT"}]
+        gen = CatenaXGenerator("test-project", "0.1.0")
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "output.spdx.jsonld")
+            gen.write(deps, out)
+            self.assertTrue(os.path.exists(out))
+            self.assertFalse(os.path.exists(out + ".tmp"))
+            with open(out) as f:
+                doc = json.load(f)
+            errs = validator.validate_catena_x(doc)
+            self.assertEqual(errs, [])
+
+    def test_catena_x_validator_rejects_non_depends_on(self):
+        """validate_catena_x catches forbidden relationship types."""
+        doc = {
+            "@context": "https://spdx.org/rdf/3.0.1/spdx-context.jsonld",
+            "@graph": [
+                {"type": "CreationInfo", "spdxId": "_:ci", "specVersion": "3.0.1",
+                 "created": "2026-01-01T00:00:00Z", "createdBy": []},
+                {"type": "SpdxDocument", "spdxId": "https://example.com/doc",
+                 "creationInfo": "_:ci", "rootElement": ["_:main"],
+                 "profileConformance": ["core", "software"], "name": "test"},
+                {"type": "software_Package", "spdxId": "_:main", "creationInfo": "_:ci",
+                 "name": "test", "software_packageVersion": "1.0"},
+                {"type": "software_Package", "spdxId": "_:dep", "creationInfo": "_:ci",
+                 "name": "dep", "software_packageVersion": "1.0"},
+                {"type": "Relationship", "spdxId": "_:rel", "creationInfo": "_:ci",
+                 "from": "_:main", "relationshipType": "contains", "to": ["_:dep"]},
+            ],
+        }
+        errs = validator.validate_catena_x(doc)
+        self.assertTrue(any("contains" in e for e in errs))
+
+    def test_catena_x_validator_rejects_file_elements(self):
+        """validate_catena_x catches software_File elements (not allowed in CX-0158)."""
+        doc = {
+            "@context": "https://spdx.org/rdf/3.0.1/spdx-context.jsonld",
+            "@graph": [
+                {"type": "CreationInfo", "spdxId": "_:ci", "specVersion": "3.0.1",
+                 "created": "2026-01-01T00:00:00Z", "createdBy": []},
+                {"type": "SpdxDocument", "spdxId": "https://example.com/doc",
+                 "creationInfo": "_:ci", "rootElement": ["_:main"],
+                 "profileConformance": ["core", "software"], "name": "test"},
+                {"type": "software_Package", "spdxId": "_:main", "creationInfo": "_:ci",
+                 "name": "test", "software_packageVersion": "1.0"},
+                {"type": "software_File", "spdxId": "_:file", "creationInfo": "_:ci",
+                 "name": "main.c"},
+            ],
+        }
+        errs = validator.validate_catena_x(doc)
+        self.assertTrue(any("software_File" in e for e in errs))
 
 
 if __name__ == "__main__":

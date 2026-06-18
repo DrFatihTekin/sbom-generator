@@ -26,6 +26,7 @@ from sbom_extractor.spdx_generator import SPDXGenerator, HTML_FILES_CAP
 from sbom_extractor.spdx3_generator import SPDX3Generator
 from sbom_extractor.cyclonedx_generator import CycloneDXGenerator
 from sbom_extractor.html_generator import HTMLGenerator
+from sbom_extractor.catena_x_generator import CatenaXGenerator
 from sbom_extractor.vcs import get_git_metadata
 from sbom_extractor import ntia, validator
 
@@ -41,8 +42,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-o", "--output", default="sbom",
                         help="Base filename for output files (default: sbom)")
     parser.add_argument("--format",
-                        choices=["spdx", "spdx3", "cyclonedx", "html", "all"],
+                        choices=["spdx", "spdx3", "cyclonedx", "html", "catena-x", "all"],
                         default="all", help="Output format (default: all)")
+    parser.add_argument("--catena-x-option", type=int, choices=[1, 2, 3, 4], default=2,
+                        metavar="{1,2,3,4}",
+                        help="CX-0158 supply chain propagation option (default: 2 — recommended flat merge)")
     parser.add_argument("--project-name", help="Project name (default: directory name)")
     parser.add_argument("--project-version", default="1.0.0",
                         help="Project version (default: 1.0.0)")
@@ -254,6 +258,7 @@ def main() -> None:  # noqa: C901
     need_spdx3 = "spdx3" in formats or "html" in formats
     need_cdx = "cyclonedx" in formats or "html" in formats
     need_html = "html" in formats
+    need_catena_x = "catena-x" in formats
 
     if not quiet:
         _err.print("[+] Generating SBOM documents…")
@@ -337,6 +342,31 @@ def main() -> None:  # noqa: C901
                 _err.print(truncated_msg)
         except Exception as e:
             _err.print(f"[red]Error writing HTML file:[/red] {e}")
+
+    # ── Catena-X (CX-0158) ───────────────────────────────────────────
+    if need_catena_x:
+        path = f"{args.output}.spdx.jsonld"
+        try:
+            cx_gen = CatenaXGenerator(
+                project_name, args.project_version,
+                git_info=git_info,
+                supplier=args.supplier,
+                reproducible=args.reproducible,
+                propagation_option=args.catena_x_option,
+            )
+            cx_gen.write(dependencies, path)
+            written.append(path)
+            cx_doc = cx_gen.generate(dependencies)
+            errs = validator.validate_catena_x(cx_doc)
+            if errs:
+                validation_errors["catena-x"] = errs
+            if not quiet:
+                _err.print(
+                    f"[dim]Catena-X: CX-0158 / SPDX 3.0.1 JSON-LD  "
+                    f"(propagation option {args.catena_x_option})[/dim]"
+                )
+        except Exception as e:
+            _err.print(f"[red]Error writing Catena-X file:[/red] {e}")
 
     # ── Validation results ────────────────────────────────────────────
     if validation_errors and (verbose or not quiet):
