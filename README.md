@@ -9,10 +9,15 @@ A production-ready Python CLI for extracting Software Bill of Materials (SBOM) f
 ## Key Features
 
 - **Multi-ecosystem dependency extraction** — parses manifests and lock files for Python, Node.js, Rust, Go, and Java (Maven + Gradle). Lock files are preferred over manifests for exact pinned versions.
-- **Parallel file scanning** — uses a thread pool for hashing and license extraction, with a live progress bar.
-- **Correct PURL generation** — all package references follow the [Package URL spec](https://github.com/package-url/purl-spec) (`pkg:pypi/...`, `pkg:maven/...`, etc.).
-- **SPDX expression support** — correctly preserves compound license identifiers like `GPL-2.0-only OR MIT` and `GPL-2.0-only WITH Linux-syscall-note`.
+- **Parallel file scanning** — thread pool for hashing and license extraction with a live progress bar.
+- **Streaming JSON output** — SPDX and CycloneDX documents are written one entry at a time; the full document is never held in memory, making 70k+ file projects practical.
+- **Correct PURL generation** — all package references follow the [Package URL spec](https://github.com/package-url/purl-spec) (`pkg:pypi/…`, `pkg:maven/…`, etc.).
+- **CPE identifiers** — best-effort CPE 2.3 strings generated for every dependency, enabling vulnerability matching against the NVD.
+- **SPDX expression support** — correctly preserves compound identifiers like `GPL-2.0-only OR MIT` and `GPL-2.0-only WITH Linux-syscall-note`.
 - **Git VCS metadata** — embeds commit, branch, tag, and remote URL into every SBOM format.
+- **Reproducible output** — `--reproducible` produces bit-identical SBOMs across runs (fixed timestamp, deterministic UUID).
+- **NTIA minimum elements check** — validates the 7 NTIA-required fields at runtime and reports any gaps.
+- **SBOM structural validation** — validates generated SPDX 2.3 and CycloneDX 1.5 documents before writing.
 - **Standards-compliant output** — SPDX 2.3, SPDX 3.0.1, and CycloneDX 1.5 JSON; plus an interactive HTML dashboard.
 - **Precision C/C++ build tracing** — via Clang `compile_commands.json` or Linux kernel Kbuild `.cmd` files.
 
@@ -28,11 +33,11 @@ SPDX license tags are extracted from any source file, including: C, C++, Python,
 
 | Ecosystem | Files parsed (lock file preferred) |
 |---|---|
-| Python | `poetry.lock` / `requirements.txt`, `pyproject.toml` |
+| Python | `poetry.lock` / `requirements.txt` / `requirements.in`, `pyproject.toml` |
 | Node.js | `package-lock.json` / `package.json` |
 | Rust | `Cargo.lock` / `Cargo.toml` |
 | Go | `go.sum` / `go.mod` |
-| Java (Maven) | `pom.xml` |
+| Java (Maven) | `pom.xml` — including sub-modules and `<properties>` resolution |
 | Java (Gradle) | `gradle.lockfile` / `build.gradle` / `build.gradle.kts` |
 
 ---
@@ -53,6 +58,18 @@ Requires Python 3.9+. The only runtime dependency is [`rich`](https://github.com
 
 ```bash
 sbom-extractor /path/to/project -o my-project-sbom
+```
+
+### With supplier name (required for NTIA compliance)
+
+```bash
+sbom-extractor /path/to/project --supplier "Acme Corp" -o my-project-sbom
+```
+
+### Reproducible output (for SBOM diffing in CI)
+
+```bash
+sbom-extractor /path/to/project --reproducible -o my-project-sbom
 ```
 
 ### C/C++ project with a Clang compilation database
@@ -104,27 +121,48 @@ options:
                               Output format (default: all)
   --project-name NAME         Project name (default: directory name)
   --project-version VERSION   Project version (default: 1.0.0)
+  --supplier NAME             Supplier / organization name — required for NTIA compliance
   --no-hashes                 Skip SHA-256/SHA-1 hashing (faster for large projects)
+  --reproducible              Deterministic output: fixed timestamp, UUID derived from
+                              project name/version — useful for SBOM diffing in CI
   --compile-commands PATH     Path to compile_commands.json
   --kernel-build PATH         Path to kernel build directory (Kbuild .cmd files)
   --exclude DIR               Exclude a directory name from scanning (repeatable)
   --workers N                 Number of parallel worker threads (default: 2 × CPU count)
   -q, --quiet                 Suppress all progress output
-  -v, --verbose               Show extra detail (license breakdown, per-format timing)
+  -v, --verbose               Show extra detail (full license list, validation results)
 ```
 
 ---
 
 ## Output Files
 
-| File | Format |
-|---|---|
-| `sbom.spdx.json` | SPDX 2.3 |
-| `sbom.spdx3.json` | SPDX 3.0.1 |
-| `sbom.cdx.json` | CycloneDX 1.5 |
-| `sbom.html` | Interactive HTML dashboard (dark mode, offline charts) |
+| File | Format | Notes |
+|---|---|---|
+| `sbom.spdx.json` | SPDX 2.3 | Stream-written; validated before save |
+| `sbom.spdx3.json` | SPDX 3.0.1 | JSON-LD graph format |
+| `sbom.cdx.json` | CycloneDX 1.5 | Stream-written; validated before save; includes CPE |
+| `sbom.html` | Interactive HTML | Dark-mode dashboard; file list capped at 5,000 for browser performance |
 
 Use `--format spdx`, `--format cyclonedx`, etc. to generate only what you need.
+
+---
+
+## NTIA Compliance
+
+The tool checks the [NTIA minimum elements](https://www.ntia.gov/report/2021/minimum-elements-software-bill-materials) at runtime:
+
+| Element | How it's satisfied |
+|---|---|
+| Supplier name | `--supplier` flag |
+| Component name | `--project-name` (or directory name) |
+| Component version | `--project-version` |
+| Unique identifiers | PURL + CPE generated for every dependency |
+| Dependency relationships | `CONTAINS` / `DEPENDS_ON` relationships in all formats |
+| Author of SBOM data | Tool name + version in `creationInfo` |
+| Timestamp | UTC timestamp at generation time (or epoch with `--reproducible`) |
+
+Any missing elements are reported as warnings at the end of every run.
 
 ---
 
@@ -137,8 +175,11 @@ Use `--format spdx`, `--format cyclonedx`, etc. to generate only what you need.
 | `manifest_parser.py` | Manifest and lock file parsing for all supported ecosystems |
 | `compilation_db.py` | Clang `compile_commands.json` and Kbuild `.cmd` parsing |
 | `purl.py` | Canonical PURL generation |
+| `cpe.py` | Best-effort CPE 2.3 generation |
 | `vcs.py` | Git metadata extraction |
-| `spdx_generator.py` | SPDX 2.3 JSON output |
+| `ntia.py` | NTIA minimum elements compliance check |
+| `validator.py` | Structural validation for SPDX 2.3 and CycloneDX 1.5 |
+| `spdx_generator.py` | SPDX 2.3 JSON output (in-memory + streaming) |
 | `spdx3_generator.py` | SPDX 3.0.1 JSON-LD output |
-| `cyclonedx_generator.py` | CycloneDX 1.5 JSON output |
+| `cyclonedx_generator.py` | CycloneDX 1.5 JSON output (in-memory + streaming) |
 | `html_generator.py` | Self-contained interactive HTML report |
