@@ -16,14 +16,28 @@ class SPDX3Generator:
         project_version: str = "1.0.0",
         namespace: Optional[str] = None,
         git_info: Optional[Dict[str, str]] = None,
+        supplier: Optional[str] = None,
+        reproducible: bool = False,
     ) -> None:
         self.project_name = project_name
         self.project_version = project_version
-        self.namespace = namespace or f"https://spdx.org/spdxdocs/{project_name}-{uuid.uuid4()}"
-        self.creation_time = datetime.datetime.now(datetime.timezone.utc).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+        self.supplier = supplier
         self.git_info = git_info or {}
+
+        if reproducible:
+            self.creation_time = "1970-01-01T00:00:00Z"
+            self.namespace = namespace or (
+                "https://spdx.org/spdxdocs/"
+                + str(uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    f"sbom-extractor/{project_name}/{project_version}",
+                ))
+            )
+        else:
+            self.creation_time = datetime.datetime.now(datetime.timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+            self.namespace = namespace or f"https://spdx.org/spdxdocs/{project_name}-{uuid.uuid4()}"
 
     def _hash_id(self, value: str) -> str:
         return hashlib.md5(value.encode()).hexdigest()[:12]
@@ -40,12 +54,15 @@ class SPDX3Generator:
         }
 
         # ── CreationInfo ──────────────────────────────────────────────
+        created_by = [f"urn:spdx:tool:sbom-extractor-{__version__}"]
+        if self.supplier:
+            created_by.append(f"urn:spdx:organization:{self.supplier.replace(' ', '-')}")
         doc["@graph"].append({
             "type": "CreationInfo",
             "spdxId": creation_id,
             "specVersion": "3.0.1",
             "created": self.creation_time,
-            "createdBy": [f"urn:spdx:tool:sbom-extractor-{__version__}"],
+            "createdBy": created_by,
         })
 
         # ── SpdxDocument ──────────────────────────────────────────────
@@ -72,7 +89,7 @@ class SPDX3Generator:
             commit_ref = self.git_info.get("tag") or self.git_info.get("commit", "")
             remote = self.git_info["remote_url"]
             vcs_url = f"git+{remote}@{commit_ref}" if commit_ref else f"git+{remote}"
-            main_pkg["externalIdentifier"] = [
+            main_pkg["externalIdentifiers"] = [
                 {
                     "type": "ExternalIdentifier",
                     "externalIdentifierType": "other",
@@ -168,7 +185,7 @@ class SPDX3Generator:
                 "software_packageVersion": dep.get("version", "unknown"),
                 "software_primaryPurpose": "library",
                 "software_copyrightText": "NOASSERTION",
-                "externalIdentifier": [
+                "externalIdentifiers": [
                     {
                         "type": "ExternalIdentifier",
                         "externalIdentifierType": "packageUrl",

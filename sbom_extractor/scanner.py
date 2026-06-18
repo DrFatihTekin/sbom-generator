@@ -85,6 +85,7 @@ def process_file_batch(
 
     total = len(file_entries)
     results: List[Dict[str, Any]] = []
+    errors: List[str] = []
     completed = 0
     lock = threading.Lock()
 
@@ -94,24 +95,28 @@ def process_file_batch(
             return None
         try:
             size = os.path.getsize(abs_path)
-        except Exception:
+            is_src = is_text_file(abs_path)
+            lic = extract_spdx_license(abs_path) if is_src else "NOASSERTION"
+            sha256, sha1 = ("", "")
+            if calculate_hashes_flag:
+                sha256, sha1 = calculate_hashes(abs_path)
+            return {
+                "name": name,
+                "path": rel_path,
+                "size": size,
+                "is_source": is_src,
+                "license": lic,
+                "sha256": sha256,
+                "sha1": sha1,
+            }
+        except PermissionError:
+            with lock:
+                errors.append(f"Permission denied: {abs_path}")
             return None
-
-        is_src = is_text_file(abs_path)
-        lic = extract_spdx_license(abs_path) if is_src else "NOASSERTION"
-        sha256, sha1 = ("", "")
-        if calculate_hashes_flag:
-            sha256, sha1 = calculate_hashes(abs_path)
-
-        return {
-            "name": name,
-            "path": rel_path,
-            "size": size,
-            "is_source": is_src,
-            "license": lic,
-            "sha256": sha256,
-            "sha1": sha1,
-        }
+        except Exception as exc:
+            with lock:
+                errors.append(f"Skipped {abs_path}: {exc}")
+            return None
 
     if on_progress:
         on_progress(0, total)
@@ -126,6 +131,14 @@ def process_file_batch(
                     results.append(result)
             if on_progress:
                 on_progress(completed, total)
+
+    if errors:
+        import sys
+        print(
+            f"Warning: {len(errors)} file(s) skipped due to errors "
+            f"(first: {errors[0]})",
+            file=sys.stderr,
+        )
 
     return results
 

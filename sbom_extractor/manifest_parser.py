@@ -39,6 +39,8 @@ class ManifestParser:
             add(self.parse_poetry_lock(os.path.join(root, "poetry.lock")))
         elif os.path.exists(os.path.join(root, "requirements.txt")):
             add(self.parse_requirements_txt(os.path.join(root, "requirements.txt")))
+        elif os.path.exists(os.path.join(root, "requirements.in")):
+            add(self.parse_requirements_txt(os.path.join(root, "requirements.in")))
 
         if os.path.exists(os.path.join(root, "pyproject.toml")):
             add(self.parse_pyproject_toml(os.path.join(root, "pyproject.toml")))
@@ -61,9 +63,9 @@ class ManifestParser:
         elif os.path.exists(os.path.join(root, "go.mod")):
             add(self.parse_go_mod(os.path.join(root, "go.mod")))
 
-        # ── Java / Maven ──────────────────────────────────────────────
-        if os.path.exists(os.path.join(root, "pom.xml")):
-            add(self.parse_pom_xml(os.path.join(root, "pom.xml")))
+        # ── Java / Maven (root + sub-modules) ────────────────────────
+        for pom in self._find_pom_files():
+            add(self.parse_pom_xml(pom))
 
         # ── Java / Gradle (prefer lock file) ─────────────────────────
         if os.path.exists(os.path.join(root, "gradle.lockfile")):
@@ -389,17 +391,47 @@ class ManifestParser:
     # Java / Maven
     # ------------------------------------------------------------------
 
+    _MAVEN_EXCLUDES = {"target", "build", ".git", "node_modules", "__pycache__"}
+
+    def _find_pom_files(self, max_depth: int = 5) -> List[str]:
+        """Return all pom.xml paths under root_dir, excluding build directories."""
+        found: List[str] = []
+        for dirpath, dirs, files in os.walk(self.root_dir):
+            depth = dirpath.replace(self.root_dir, "").count(os.sep)
+            if depth >= max_depth:
+                dirs.clear()
+                continue
+            dirs[:] = [d for d in dirs if d not in self._MAVEN_EXCLUDES]
+            if "pom.xml" in files:
+                found.append(os.path.join(dirpath, "pom.xml"))
+        return found
+
     def parse_pom_xml(self, filepath: str) -> List[Dict[str, Any]]:
-        """Parse Maven pom.xml for declared dependencies."""
+        """Parse a Maven pom.xml, resolving <properties> references where possible."""
         deps: List[Dict[str, Any]] = []
         try:
             tree = ET.parse(filepath)
             root = tree.getroot()
 
-            # Strip namespace so tag lookups are uniform
             ns = ""
             if root.tag.startswith("{"):
                 ns = root.tag.split("}")[0] + "}"
+
+            # Collect <properties> so we can resolve ${key} references
+            properties: Dict[str, str] = {}
+            props_elem = root.find(f"{ns}properties")
+            if props_elem is not None:
+                for child in props_elem:
+                    tag = child.tag.replace(ns, "")
+                    if child.text:
+                        properties[f"${{{tag}}}"] = child.text.strip()
+
+            # Also expose project-level variables
+            for meta_field in ("version", "groupId", "artifactId"):
+                val = root.findtext(f"{ns}{meta_field}")
+                if val:
+                    properties[f"${{project.{meta_field}}}"] = val.strip()
+                    properties[f"${{pom.{meta_field}}}"] = val.strip()
 
             for dep_elem in root.iter(f"{ns}dependency"):
                 group_id = (dep_elem.findtext(f"{ns}groupId") or "").strip()
@@ -409,9 +441,10 @@ class ManifestParser:
 
                 if not group_id or not artifact_id:
                     continue
-                # Version properties like ${spring.version} cannot be resolved statically
+
+                # Attempt property resolution
                 if version.startswith("${"):
-                    version = "unknown"
+                    version = properties.get(version, "unknown")
 
                 d = self._dep(f"{group_id}:{artifact_id}", version, "maven", filepath)
                 d["scope"] = scope
