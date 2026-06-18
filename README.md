@@ -13,15 +13,15 @@ A production-ready Python CLI for extracting Software Bill of Materials (SBOM) f
 
 - **Multi-ecosystem dependency extraction** — parses manifests and lock files for Python, Node.js, Rust, Go, and Java (Maven + Gradle). Lock files are preferred over manifests for exact pinned versions.
 - **Parallel file scanning** — thread pool for hashing and license extraction with a live progress bar.
-- **Streaming JSON output** — SPDX and CycloneDX documents are written one entry at a time; the full document is never held in memory, making 70k+ file projects practical.
+- **Streaming JSON output** — SPDX 2.3, SPDX 3.0.1, and CycloneDX documents are written one entry at a time; the full document is never held in memory, making 70k+ file projects practical.
+- **Catena-X / CX-0158 support** — generates CX-0158 compliant SPDX 3.0.1 JSON-LD (`.spdx.jsonld`) for automotive supply chain exchange, with all 4 propagation options.
 - **Correct PURL generation** — all package references follow the [Package URL spec](https://github.com/package-url/purl-spec) (`pkg:pypi/…`, `pkg:maven/…`, etc.).
 - **CPE identifiers** — best-effort CPE 2.3 strings generated for every dependency, enabling vulnerability matching against the NVD.
 - **SPDX expression support** — correctly preserves compound identifiers like `GPL-2.0-only OR MIT` and `GPL-2.0-only WITH Linux-syscall-note`.
 - **Git VCS metadata** — embeds commit, branch, tag, and remote URL into every SBOM format.
 - **Reproducible output** — `--reproducible` produces bit-identical SBOMs across runs (fixed timestamp, deterministic UUID).
 - **NTIA minimum elements check** — validates the 7 NTIA-required fields at runtime and reports any gaps.
-- **SBOM structural validation** — validates generated SPDX 2.3 and CycloneDX 1.5 documents before writing.
-- **Standards-compliant output** — SPDX 2.3, SPDX 3.0.1, and CycloneDX 1.5 JSON; plus an interactive HTML dashboard.
+- **SBOM structural validation** — validates generated SPDX 2.3, CycloneDX 1.5, and Catena-X documents before writing.
 - **Precision C/C++ build tracing** — via Clang `compile_commands.json` or Linux kernel Kbuild `.cmd` files.
 
 ---
@@ -81,6 +81,25 @@ sbom-generator /path/to/project --supplier "Acme Corp" -o my-project-sbom
 sbom-generator /path/to/project --reproducible -o my-project-sbom
 ```
 
+### Catena-X (CX-0158) SBOM for automotive supply chain
+
+```bash
+sbom-generator /path/to/project \
+  --format catena-x \
+  --supplier "Acme Corp" \
+  -o my-project-sbom
+```
+
+This generates `my-project-sbom.spdx.jsonld` — a CX-0158 compliant SPDX 3.0.1 JSON-LD file ready for exchange via the Catena-X dataspace. Use `--catena-x-option` to select the supply chain propagation strategy (default: Option 2, the CX-0158 recommended flat merge):
+
+```bash
+# Option 1: anonymous nodes (maximum supply-chain detail, requires bilateral compliance check)
+sbom-generator /path/to/project --format catena-x --catena-x-option 1 -o my-project-sbom
+
+# Option 4: fully flattened (maximum IP protection)
+sbom-generator /path/to/project --format catena-x --catena-x-option 4 -o my-project-sbom
+```
+
 ### C/C++ project with a Clang compilation database
 
 ```bash
@@ -126,7 +145,7 @@ positional arguments:
 options:
   -h, --help                  Show this help message and exit
   -o, --output OUTPUT         Base filename for output files (default: sbom)
-  --format {spdx,spdx3,cyclonedx,html,all}
+  --format {spdx,spdx3,cyclonedx,html,catena-x,all}
                               Output format (default: all)
   --project-name NAME         Project name (default: directory name)
   --project-version VERSION   Project version (default: 1.0.0)
@@ -134,6 +153,8 @@ options:
   --no-hashes                 Skip SHA-256/SHA-1 hashing (faster for large projects)
   --reproducible              Deterministic output: fixed timestamp, UUID derived from
                               project name/version — useful for SBOM diffing in CI
+  --catena-x-option {1,2,3,4}
+                              CX-0158 supply chain propagation option (default: 2)
   --compile-commands PATH     Path to compile_commands.json
   --kernel-build PATH         Path to kernel build directory (Kbuild .cmd files)
   --exclude DIR               Exclude a directory name from scanning (repeatable)
@@ -149,11 +170,31 @@ options:
 | File | Format | Notes |
 |---|---|---|
 | `sbom.spdx.json` | SPDX 2.3 | Stream-written; validated before save |
-| `sbom.spdx3.json` | SPDX 3.0.1 | JSON-LD graph format |
+| `sbom.spdx3.json` | SPDX 3.0.1 | Stream-written JSON-LD graph |
 | `sbom.cdx.json` | CycloneDX 1.5 | Stream-written; validated before save; includes CPE |
+| `sbom.spdx.jsonld` | Catena-X CX-0158 | SPDX 3.0.1 JSON-LD; package-only; only `DEPENDS_ON` relationships |
 | `sbom.html` | Interactive HTML | Dark-mode dashboard; file list capped at 5,000 for browser performance |
 
-Use `--format spdx`, `--format cyclonedx`, etc. to generate only what you need.
+Use `--format spdx`, `--format catena-x`, etc. to generate only what you need.
+
+---
+
+## Catena-X / CX-0158 Compliance
+
+The `--format catena-x` output conforms to [CX-0158 Car SBOM v1.0.0](https://catenax-ev.github.io/docs/standards/CX-0158-CarSBOM):
+
+| CX-0158 Requirement | How it's satisfied |
+|---|---|
+| SPDX 3.0.1 JSON-LD format (§3.2.1–3.2.2) | `.spdx.jsonld` output with correct `@context` |
+| Only `DEPENDS_ON` relationships (§3.2.3) | Enforced in generator and validated before write |
+| Package-level components only | No `software_File` elements in output |
+| PURL external identifiers | `externalIdentifiers[packageUrl]` on every package |
+| Supplier metadata | `supplier` field from `--supplier` flag |
+| Propagation Option 1 — anonymous nodes | SHA3-256 node IDs per spec (`catena-x-sbom-option-1-<hex>`) |
+| Propagation Option 2 — flat merge (default) | Direct `DEPENDS_ON` from root to each dependency |
+| Propagation Options 3 & 4 | Flattened variants |
+
+**Note:** Dataspace exchange (EDC connector, AAS digital twin registration, notification API, usage policies) requires Catena-X infrastructure and is outside the scope of this CLI tool.
 
 ---
 
@@ -187,8 +228,9 @@ Any missing elements are reported as warnings at the end of every run.
 | `cpe.py` | Best-effort CPE 2.3 generation |
 | `vcs.py` | Git metadata extraction |
 | `ntia.py` | NTIA minimum elements compliance check |
-| `validator.py` | Structural validation for SPDX 2.3 and CycloneDX 1.5 |
-| `spdx_generator.py` | SPDX 2.3 JSON output (in-memory + streaming) |
-| `spdx3_generator.py` | SPDX 3.0.1 JSON-LD output |
-| `cyclonedx_generator.py` | CycloneDX 1.5 JSON output (in-memory + streaming) |
+| `validator.py` | Structural validation for SPDX 2.3, CycloneDX 1.5, and Catena-X CX-0158 |
+| `spdx_generator.py` | SPDX 2.3 JSON output (streaming) |
+| `spdx3_generator.py` | SPDX 3.0.1 JSON-LD output (streaming) |
+| `cyclonedx_generator.py` | CycloneDX 1.5 JSON output (streaming) |
+| `catena_x_generator.py` | Catena-X CX-0158 SPDX 3.0.1 JSON-LD output |
 | `html_generator.py` | Self-contained interactive HTML report |
