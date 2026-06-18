@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sbom-extractor"
+version = "1.1.0"
+description = "Extract SPDX and CycloneDX SBOMs from open-source projects, including the Linux kernel"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "Antigravity Team"}]
+keywords = ["sbom", "spdx", "cyclonedx", "security", "linux-kernel", "compliance"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Security",
+    "Topic :: Software Development :: Build Tools",
+    "Intended Audience :: Developers",
+]
+dependencies = ["rich>=13.0"]
+
+[project.scripts]
+sbom-extractor = "sbom_extractor.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sbom_extractor*"]
