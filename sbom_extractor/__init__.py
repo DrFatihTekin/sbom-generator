@@ -4,4 +4,4 @@ A Python-based utility to extract SPDX and CycloneDX Software Bill of Materials 
 for open-source projects, including complex C/C++ projects like the Linux kernel.
 """
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
