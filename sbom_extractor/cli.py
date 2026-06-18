@@ -34,8 +34,8 @@ _err = Console(stderr=True)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="sbom-extractor",
-        description=f"sbom-extractor v{__version__} — Extract SPDX / CycloneDX SBOMs from open-source projects.",
+        prog="sbom-generator",
+        description=f"sbom-generator v{__version__} — Extract SPDX / CycloneDX SBOMs from open-source projects.",
     )
     parser.add_argument("path", help="Path to the project directory to scan")
     parser.add_argument("-o", "--output", default="sbom",
@@ -109,7 +109,7 @@ def main() -> None:  # noqa: C901
     if not quiet:
         _err.print(
             Panel(
-                f"[bold]sbom-extractor[/bold] [dim]v{__version__}[/dim]\n"
+                f"[bold]sbom-generator[/bold] [dim]v{__version__}[/dim]\n"
                 f"Project : [cyan]{project_name}[/cyan]  v{args.project_version}\n"
                 f"Target  : [dim]{project_path}[/dim]"
                 + (f"\nSupplier: [dim]{args.supplier}[/dim]" if args.supplier else "")

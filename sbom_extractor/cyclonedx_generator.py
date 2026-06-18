@@ -36,7 +36,7 @@ class CycloneDXGenerator:
                 "urn:uuid:"
                 + str(uuid.uuid5(
                     uuid.NAMESPACE_URL,
-                    f"sbom-extractor/{project_name}/{project_version}",
+                    f"sbom-generator/{project_name}/{project_version}",
                 ))
             )
         else:
@@ -91,7 +91,7 @@ class CycloneDXGenerator:
             "timestamp": self.creation_time,
             "tools": {
                 "components": [
-                    {"type": "application", "name": "sbom-extractor", "version": __version__}
+                    {"type": "application", "name": "sbom-generator", "version": __version__}
                 ]
             },
             "component": self._root_component(),
@@ -227,7 +227,7 @@ class CycloneDXGenerator:
         if truncated:
             bom["metadata"]["properties"] = [
                 {
-                    "name": "sbom-extractor:truncated",
+                    "name": "sbom-generator:truncated",
                     "value": f"File list capped at {max_files} of {len(files)} total",
                 }
             ]

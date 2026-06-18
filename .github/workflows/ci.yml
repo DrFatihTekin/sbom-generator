@@ -38,4 +38,4 @@ jobs:
         run: pytest tests/ -v
 
       - name: Smoke test CLI
-        run: sbom-extractor . --format spdx --no-hashes --quiet -o /tmp/smoke
+        run: sbom-generator . --format spdx --no-hashes --quiet -o /tmp/smoke

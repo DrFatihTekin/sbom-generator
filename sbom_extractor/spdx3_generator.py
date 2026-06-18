@@ -34,7 +34,7 @@ class SPDX3Generator:
                 "https://spdx.org/spdxdocs/"
                 + str(uuid.uuid5(
                     uuid.NAMESPACE_URL,
-                    f"sbom-extractor/{project_name}/{project_version}",
+                    f"sbom-generator/{project_name}/{project_version}",
                 ))
             )
         else:
@@ -47,7 +47,7 @@ class SPDX3Generator:
         return hashlib.md5(value.encode()).hexdigest()[:12]
 
     def _created_by(self) -> List[str]:
-        creators = [f"urn:spdx:tool:sbom-extractor-{__version__}"]
+        creators = [f"urn:spdx:tool:sbom-generator-{__version__}"]
         if self.supplier:
             creators.append(f"urn:spdx:organization:{self.supplier.replace(' ', '-')}")
         return creators

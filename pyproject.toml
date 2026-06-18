@@ -31,7 +31,7 @@ Repository = "https://github.com/DrFatihTekin/sbom-generator"
 Issues = "https://github.com/DrFatihTekin/sbom-generator/issues"
 
 [project.scripts]
-sbom-extractor = "sbom_extractor.cli:main"
+sbom-generator = "sbom_extractor.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

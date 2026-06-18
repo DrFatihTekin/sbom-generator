@@ -66,25 +66,25 @@ Requires Python 3.9+. The only runtime dependency is [`rich`](https://github.com
 ### General directory scan
 
 ```bash
-sbom-extractor /path/to/project -o my-project-sbom
+sbom-generator /path/to/project -o my-project-sbom
 ```
 
 ### With supplier name (required for NTIA compliance)
 
 ```bash
-sbom-extractor /path/to/project --supplier "Acme Corp" -o my-project-sbom
+sbom-generator /path/to/project --supplier "Acme Corp" -o my-project-sbom
 ```
 
 ### Reproducible output (for SBOM diffing in CI)
 
 ```bash
-sbom-extractor /path/to/project --reproducible -o my-project-sbom
+sbom-generator /path/to/project --reproducible -o my-project-sbom
 ```
 
 ### C/C++ project with a Clang compilation database
 
 ```bash
-sbom-extractor /path/to/project \
+sbom-generator /path/to/project \
   --compile-commands /path/to/project/compile_commands.json \
   -o project-sbom
 ```
@@ -98,7 +98,7 @@ cd /path/to/linux
 make defconfig && make -j$(nproc)
 python3 scripts/clang-tools/gen_compile_commands.py
 
-sbom-extractor /path/to/linux \
+sbom-generator /path/to/linux \
   --compile-commands /path/to/linux/compile_commands.json \
   --no-hashes \
   -o linux-sbom
@@ -107,7 +107,7 @@ sbom-extractor /path/to/linux \
 ### Linux kernel (Kbuild .cmd files)
 
 ```bash
-sbom-extractor /path/to/linux \
+sbom-generator /path/to/linux \
   --kernel-build /path/to/linux/build-output \
   --no-hashes \
   -o linux-sbom

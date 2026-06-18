@@ -39,7 +39,7 @@ class SPDXGenerator:
                 "https://spdx.org/spdxdocs/"
                 + str(uuid.uuid5(
                     uuid.NAMESPACE_URL,
-                    f"sbom-extractor/{project_name}/{project_version}",
+                    f"sbom-generator/{project_name}/{project_version}",
                 ))
             )
         else:
@@ -60,7 +60,7 @@ class SPDXGenerator:
         return f"SPDXRef-Pkg-{hashlib.md5(key.encode()).hexdigest()[:16]}"
 
     def _creation_info(self) -> Dict[str, Any]:
-        creators = [f"Tool: sbom-extractor-{__version__}"]
+        creators = [f"Tool: sbom-generator-{__version__}"]
         if self.supplier:
             creators.append(f"Organization: {self.supplier}")
         return {
