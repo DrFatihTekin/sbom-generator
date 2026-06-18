@@ -2,6 +2,7 @@
 import datetime
 import hashlib
 import json
+import os
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -123,7 +124,7 @@ class SPDXGenerator:
             "fileName": f"./{path}",
             "fileTypes": ftypes,
             "checksums": [],
-            "licenseConcluded": f.get("license", "NOASSERTION"),
+            "licenseConcluded": "NOASSERTION",
             "licenseInfoInFiles": [f.get("license", "NOASSERTION")],
             "copyrightText": "NOASSERTION",
         }
@@ -189,41 +190,51 @@ class SPDXGenerator:
                 seen_dep_ids.add(did)
                 dep_entries.append((did, dep))
 
-        with open(output_path, "w", encoding="utf-8") as out:
-            out.write("{\n")
-            out.write(f'  "spdxVersion": "SPDX-2.3",\n')
-            out.write(f'  "dataLicense": "CC0-1.0",\n')
-            out.write(f'  "SPDXID": "SPDXRef-DOCUMENT",\n')
-            out.write(f'  "name": {json.dumps(self.project_name)},\n')
-            out.write(f'  "documentNamespace": {json.dumps(self.namespace)},\n')
-            out.write(f'  "creationInfo": {json.dumps(self._creation_info())},\n')
+        tmp = output_path + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as out:
+                out.write("{\n")
+                out.write(f'  "spdxVersion": "SPDX-2.3",\n')
+                out.write(f'  "dataLicense": "CC0-1.0",\n')
+                out.write(f'  "SPDXID": "SPDXRef-DOCUMENT",\n')
+                out.write(f'  "name": {json.dumps(self.project_name)},\n')
+                out.write(f'  "documentNamespace": {json.dumps(self.namespace)},\n')
+                out.write(f'  "creationInfo": {json.dumps(self._creation_info())},\n')
 
-            # Packages
-            out.write('  "packages": [\n')
-            out.write(f'    {json.dumps(self._main_package(main_id, file_licenses))}')
-            for did, dep in dep_entries:
-                out.write(f',\n    {json.dumps(self._dep_package(did, dep))}')
-            out.write("\n  ],\n")
+                # Packages
+                out.write('  "packages": [\n')
+                out.write(f'    {json.dumps(self._main_package(main_id, file_licenses))}')
+                for did, dep in dep_entries:
+                    out.write(f',\n    {json.dumps(self._dep_package(did, dep))}')
+                out.write("\n  ],\n")
 
-            # Files
-            out.write('  "files": [\n')
-            first = True
-            for f in files:
-                sep = "" if first else ",\n"
-                out.write(f'{sep}    {json.dumps(self._file_entry(f))}')
-                first = False
-            out.write("\n  ],\n")
+                # Files
+                out.write('  "files": [\n')
+                first = True
+                for f in files:
+                    sep = "" if first else ",\n"
+                    out.write(f'{sep}    {json.dumps(self._file_entry(f))}')
+                    first = False
+                out.write("\n  ],\n")
 
-            # Relationships
-            out.write('  "relationships": [\n')
-            out.write(f'    {json.dumps({"spdxElementId": "SPDXRef-DOCUMENT", "relatedSpdxElement": main_id, "relationshipType": "DESCRIBES"})}')
-            for f in files:
-                fid = self._file_id(f["path"])
-                out.write(f',\n    {json.dumps({"spdxElementId": main_id, "relatedSpdxElement": fid, "relationshipType": "CONTAINS"})}')
-            for did, _ in dep_entries:
-                out.write(f',\n    {json.dumps({"spdxElementId": main_id, "relatedSpdxElement": did, "relationshipType": "DEPENDS_ON"})}')
-            out.write("\n  ]\n")
-            out.write("}\n")
+                # Relationships
+                out.write('  "relationships": [\n')
+                out.write(f'    {json.dumps({"spdxElementId": "SPDXRef-DOCUMENT", "relatedSpdxElement": main_id, "relationshipType": "DESCRIBES"})}')
+                for f in files:
+                    fid = self._file_id(f["path"])
+                    out.write(f',\n    {json.dumps({"spdxElementId": main_id, "relatedSpdxElement": fid, "relationshipType": "CONTAINS"})}')
+                for did, _ in dep_entries:
+                    out.write(f',\n    {json.dumps({"spdxElementId": main_id, "relatedSpdxElement": did, "relationshipType": "DEPENDS_ON"})}')
+                out.write("\n  ]\n")
+                out.write("}\n")
+
+            os.replace(tmp, output_path)
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
     def generate(
         self,

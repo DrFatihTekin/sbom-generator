@@ -2,6 +2,7 @@
 import datetime
 import hashlib
 import json
+import os
 import re
 import uuid
 from typing import Any, Dict, List, Optional
@@ -154,36 +155,46 @@ class CycloneDXGenerator:
                 seen_purls.add(purl)
                 dep_comps.append(self._dep_component(dep))
 
-        with open(output_path, "w", encoding="utf-8") as out:
-            out.write("{\n")
-            out.write(f'  "bomFormat": "CycloneDX",\n')
-            out.write(f'  "specVersion": "1.5",\n')
-            out.write(f'  "serialNumber": {json.dumps(self.serial_number)},\n')
-            out.write(f'  "version": 1,\n')
-            out.write(f'  "metadata": {json.dumps(self._metadata())},\n')
+        tmp = output_path + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as out:
+                out.write("{\n")
+                out.write(f'  "bomFormat": "CycloneDX",\n')
+                out.write(f'  "specVersion": "1.5",\n')
+                out.write(f'  "serialNumber": {json.dumps(self.serial_number)},\n')
+                out.write(f'  "version": 1,\n')
+                out.write(f'  "metadata": {json.dumps(self._metadata())},\n')
 
-            # Components
-            out.write('  "components": [\n')
-            first = True
-            for f in files:
-                sep = "" if first else ",\n"
-                out.write(f'{sep}    {json.dumps(self._file_component(f))}')
-                first = False
-            for dc in dep_comps:
-                sep = "" if first else ",\n"
-                out.write(f'{sep}    {json.dumps(dc)}')
-                first = False
-            out.write("\n  ],\n")
+                # Components
+                out.write('  "components": [\n')
+                first = True
+                for f in files:
+                    sep = "" if first else ",\n"
+                    out.write(f'{sep}    {json.dumps(self._file_component(f))}')
+                    first = False
+                for dc in dep_comps:
+                    sep = "" if first else ",\n"
+                    out.write(f'{sep}    {json.dumps(dc)}')
+                    first = False
+                out.write("\n  ],\n")
 
-            # Dependencies (only meaningful edges; skip the O(n) empty file entries)
-            main_depends_on = (
-                [self._file_ref(f["path"]) for f in files]
-                + [dc["bom-ref"] for dc in dep_comps]
-            )
-            out.write('  "dependencies": [\n')
-            out.write(f'    {json.dumps({"ref": main_ref, "dependsOn": main_depends_on})}')
-            out.write("\n  ]\n")
-            out.write("}\n")
+                # Dependencies (only meaningful edges; skip the O(n) empty file entries)
+                main_depends_on = (
+                    [self._file_ref(f["path"]) for f in files]
+                    + [dc["bom-ref"] for dc in dep_comps]
+                )
+                out.write('  "dependencies": [\n')
+                out.write(f'    {json.dumps({"ref": main_ref, "dependsOn": main_depends_on})}')
+                out.write("\n  ]\n")
+                out.write("}\n")
+
+            os.replace(tmp, output_path)
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
     def generate(
         self,

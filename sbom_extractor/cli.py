@@ -1,4 +1,3 @@
-import json
 import os
 import sys
 import time
@@ -101,6 +100,11 @@ def main() -> None:  # noqa: C901
     project_name = args.project_name or os.path.basename(project_path) or "unknown-project"
     quiet = args.quiet
     verbose = args.verbose
+
+    # Sanitize supplier: collapse whitespace, strip control characters that
+    # would break SPDX "Organization: <name>" creator strings.
+    if args.supplier:
+        args.supplier = " ".join(args.supplier.split())
 
     if not quiet:
         _err.print(
@@ -287,10 +291,7 @@ def main() -> None:  # noqa: C901
         if "spdx3" in formats:
             path = f"{args.output}.spdx3.json"
             try:
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(
-                        spdx3_gen.generate(files, dependencies), f, indent=2
-                    )
+                spdx3_gen.write_streaming(files, dependencies, path)
                 written.append(path)
             except Exception as e:
                 _err.print(f"[red]Error writing SPDX 3 file:[/red] {e}")
