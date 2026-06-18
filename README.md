@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/DrFatihTekin/sbom-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/DrFatihTekin/sbom-generator/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/sbom-generator)](https://pypi.org/project/sbom-generator/)
+[![Python](https://img.shields.io/pypi/pyversions/sbom-generator)](https://pypi.org/project/sbom-generator/)
 
 A production-ready Python CLI for extracting Software Bill of Materials (SBOM) from open-source codebases. Built for scale — from small libraries to the Linux kernel (70k+ files).
 
