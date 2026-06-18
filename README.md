@@ -45,6 +45,12 @@ SPDX license tags are extracted from any source file, including: C, C++, Python,
 ## Installation
 
 ```bash
+pip install sbom-generator
+```
+
+For development:
+
+```bash
 pip install -e .
 ```
 
