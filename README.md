@@ -1,5 +1,7 @@
 # OpenSBOM Extractor & Viewer
 
+[![CI](https://github.com/DrFatihTekin/sbom-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/DrFatihTekin/sbom-generator/actions/workflows/ci.yml)
+
 OpenSBOM Extractor is a Python-based utility designed to analyze and extract Software Bill of Materials (SBOM) metadata from open-source codebases. It is uniquely tailored to support both modern high-level languages and complex, compiled low-level systems like the Linux kernel.
 
 ## 🚀 Key Features
