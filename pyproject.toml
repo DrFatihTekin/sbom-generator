@@ -3,7 +3,7 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sbom-extractor"
+name = "sbom-generator"
 version = "1.1.0"
 description = "Extract SPDX and CycloneDX SBOMs from open-source projects, including the Linux kernel"
 readme = "README.md"
